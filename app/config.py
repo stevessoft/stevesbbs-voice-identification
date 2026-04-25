@@ -20,8 +20,11 @@ class Settings(BaseSettings):
 
     # Skip the first N seconds of incoming-call audio to drop the
     # automated greeting. Set to 0 to disable, or pass per-call via
-    # the API request to override.
-    greeting_skip_seconds: float = 11.0
+    # the API request to override. Default 18s covers both the short
+    # ("Thank you for calling") and long ("Monday to Friday 10am-2pm
+    # please wait while your call is connected") greeting variants
+    # observed in real Steve's Computers call audio.
+    greeting_skip_seconds: float = 18.0
 
     enroll_dir: Path = Path("./enrollment_audio")
     embeddings_path: Path = Path("./enrolled_voices/embeddings.json")

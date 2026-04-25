@@ -25,7 +25,15 @@ enrollment_audio/
 - 30 to 60 seconds per technician minimum, more is better
 - Multiple short clips beat one long clip (averages a more stable profile)
 - Natural conversational speech preferred over scripted reads
-- Match the call channel where possible (phone audio quality, not studio mic)
+- **Phone-quality audio strongly preferred** over studio-mic recordings.
+  Real call audio from Cytracom is 8kHz mono ~32 kbps. Studio recordings
+  are 44.1kHz/128kbps+ and produce embeddings that don't match phone audio
+  even after format conversion. The enrollment pipeline runs samples through
+  a G.711 µ-law roundtrip to normalize, but starting with phone-quality
+  audio gets the cleanest result.
+- Best path: collect 4-6 real call recordings per tech from Cytracom (via
+  the calls API or pulling from the recording_url), trim to clean speech,
+  drop them here.
 - Common formats accepted: .wav, .mp3, .m4a, .flac, .ogg
 
 ## Privacy

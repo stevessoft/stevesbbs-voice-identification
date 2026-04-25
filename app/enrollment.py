@@ -1,5 +1,7 @@
 import json
 import logging
+import subprocess
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +12,37 @@ from app.config import settings
 log = logging.getLogger(__name__)
 
 AUDIO_SUFFIXES = {".wav", ".mp3", ".m4a", ".flac", ".ogg"}
+
+
+def _phone_codec_normalize(input_path: Path) -> Path:
+    """
+    Round-trip the audio through G.711 µ-law at 8kHz mono to make enrollment
+    audio comparable to the phone-quality call audio Cytracom delivers.
+    Without this, enrollment audio recorded via studio mic or other
+    high-quality paths produces embeddings that don't match phone-codec
+    test audio, giving any phone-recorded enrollment an unfair edge.
+
+    Returns a path to a temp .wav (16kHz mono) suitable for the embedder.
+    Caller is responsible for deleting the temp file.
+    """
+    tmp_mulaw = Path(tempfile.mkstemp(suffix=".mulaw.wav")[1])
+    tmp_out = Path(tempfile.mkstemp(suffix=".norm.wav")[1])
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(input_path), "-ar", "8000", "-ac", "1",
+             "-c:a", "pcm_mulaw", "-f", "wav", str(tmp_mulaw)],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(tmp_mulaw), "-ar", "16000", "-ac", "1", str(tmp_out)],
+            check=True, capture_output=True,
+        )
+        return tmp_out
+    finally:
+        try:
+            tmp_mulaw.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def build_embeddings(enroll_dir: Path | None = None, output_path: Path | None = None) -> dict[str, list[float]]:
@@ -29,10 +62,16 @@ def build_embeddings(enroll_dir: Path | None = None, output_path: Path | None = 
         if not clips:
             log.warning("No audio for %s in %s", tech_dir.name, tech_dir)
             continue
-        embeddings = [encoder.embed_utterance(preprocess_wav(c)) for c in clips]
+        embeddings = []
+        for clip in clips:
+            normalized = _phone_codec_normalize(clip)
+            try:
+                embeddings.append(encoder.embed_utterance(preprocess_wav(normalized)))
+            finally:
+                normalized.unlink(missing_ok=True)
         mean_embedding = np.mean(embeddings, axis=0)
         profiles[tech_dir.name] = mean_embedding.tolist()
-        log.info("Enrolled %s from %d clips", tech_dir.name, len(clips))
+        log.info("Enrolled %s from %d clips (phone-codec normalized)", tech_dir.name, len(clips))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(profiles))
