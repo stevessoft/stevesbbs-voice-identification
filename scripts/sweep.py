@@ -19,7 +19,7 @@ logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s 
 log = logging.getLogger("sweep")
 
 
-async def run(hours_back: int = 24) -> int:
+async def run(hours_back: int = 24, skip_spam: bool = True) -> int:
     end = datetime.now(timezone.utc)
     start = end - timedelta(hours=hours_back)
     client = GodwinClient()
@@ -31,18 +31,18 @@ async def run(hours_back: int = 24) -> int:
         await client.aclose()
         return 1
 
-    log.info("Sweep window %s → %s, %d calls", start.isoformat(), end.isoformat(), len(calls))
+    log.info("Sweep window %s → %s, %d calls", start.date(), end.date(), len(calls))
 
     processed = 0
     failed = 0
+    skipped = 0
     for call in calls:
-        call_id = call.get("call_id") or call.get("id")
-        audio_url = call.get("audio_url") or call.get("recording_url")
-        direction = call.get("direction", "inbound")
-        if not (call_id and audio_url):
-            log.warning("Skipping malformed call: %s", call)
-            failed += 1
+        if skip_spam and call.get("spam"):
+            skipped += 1
             continue
+        call_id = call["call_id"]
+        audio_url = call["audio_url"]
+        direction = call.get("direction", "inbound")
         try:
             await pipeline.process_call(call_id, audio_url, direction=direction)
             processed += 1
@@ -51,7 +51,7 @@ async def run(hours_back: int = 24) -> int:
             failed += 1
 
     await client.aclose()
-    log.info("Sweep complete: %d processed, %d failed", processed, failed)
+    log.info("Sweep complete: %d processed, %d skipped (spam), %d failed", processed, skipped, failed)
     return 0 if failed == 0 else 2
 
 
