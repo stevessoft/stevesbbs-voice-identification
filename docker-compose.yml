@@ -1,0 +1,25 @@
+services:
+  voice-id:
+    build: .
+    container_name: voice-id
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./enrollment_audio:/app/enrollment_audio:ro
+      - ./enrolled_voices:/app/enrolled_voices
+      - whisper-cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  whisper-cache:

@@ -1,0 +1,33 @@
+.env
+.env.local
+*.pyc
+__pycache__/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Audio is never committed
+*.m4a
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.pcm
+
+# Embeddings output (generated locally)
+enrolled_voices/embeddings.json
+
+# Whisper model cache
+.cache/
+models/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
