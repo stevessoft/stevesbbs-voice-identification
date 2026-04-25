@@ -116,6 +116,24 @@ See [.env.example](.env.example).
 | `ENROLL_DIR` | Default `./enrollment_audio` |
 | `EMBEDDINGS_PATH` | Default `./enrolled_voices/embeddings.json` |
 
+## Local end-to-end testing (no Godwin needed yet)
+
+```bash
+# Drop a few sample audio files in mock_data/audio/<name>.wav
+# Then create mock_data/calls.json:
+#   [{"call_id": "c001", "audio_url": "http://localhost:9000/audio/sample.wav", "started_at": "2026-04-25T20:00:00Z"}]
+
+# Terminal 1: mock Godwin server
+python -m scripts.mock_godwin
+
+# Terminal 2: run a sweep against the mock
+GODWIN_API_URL=http://localhost:9000 \
+WEBHOOK_URL=http://localhost:9000/webhook \
+python -m scripts.sweep 24
+
+# Inspect mock_data/webhook_log.jsonl to see what got POSTed back.
+```
+
 ## Deployment (Coolify)
 
 ```bash
@@ -123,6 +141,8 @@ docker compose up -d
 ```
 
 Coolify reads `Dockerfile` and `docker-compose.yml`. The service binds to `0.0.0.0:8000`. Coolify reverse-proxies to a public URL.
+
+The Dockerfile installs **CPU-only torch** explicitly (avoids ~3GB of CUDA libs that would otherwise pull in by default), keeping the image fit for a 4GB VPS.
 
 ## Privacy
 

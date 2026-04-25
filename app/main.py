@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app import enrollment, pipeline, speaker_id
@@ -46,7 +46,6 @@ async def reallocate(req: ReallocateRequest) -> dict:
     speaker's profile and re-averages. Audio deleted after.
     """
     import uuid
-    from pathlib import Path
 
     import httpx
 

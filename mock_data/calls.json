@@ -1,0 +1,7 @@
+[
+  {
+    "call_id": "smoke-001",
+    "audio_url": "http://localhost:9000/audio/sample-call.wav",
+    "started_at": "2026-04-25T20:00:00Z"
+  }
+]

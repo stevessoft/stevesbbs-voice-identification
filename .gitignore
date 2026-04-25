@@ -31,3 +31,8 @@ models/
 .idea/
 *.swp
 .DS_Store
+
+# Mock dev fixtures
+mock_data/audio/
+mock_data/webhook_log.jsonl
+scratch/
