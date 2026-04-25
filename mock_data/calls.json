@@ -1,7 +1,8 @@
 [
   {
-    "call_id": "smoke-001",
-    "audio_url": "http://localhost:9000/audio/sample-call.wav",
-    "started_at": "2026-04-25T20:00:00Z"
+    "call_id": "real-001",
+    "audio_url": "http://localhost:9000/audio/stonewall-real.mp3",
+    "direction": "inbound",
+    "started_at": "2026-04-25T21:00:00Z"
   }
 ]

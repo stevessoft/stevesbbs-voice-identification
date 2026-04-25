@@ -38,12 +38,13 @@ async def run(hours_back: int = 24) -> int:
     for call in calls:
         call_id = call.get("call_id") or call.get("id")
         audio_url = call.get("audio_url") or call.get("recording_url")
+        direction = call.get("direction", "inbound")
         if not (call_id and audio_url):
             log.warning("Skipping malformed call: %s", call)
             failed += 1
             continue
         try:
-            await pipeline.process_call(call_id, audio_url)
+            await pipeline.process_call(call_id, audio_url, direction=direction)
             processed += 1
         except Exception as e:
             log.exception("Failed processing call %s: %s", call_id, e)

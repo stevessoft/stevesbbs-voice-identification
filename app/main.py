@@ -15,6 +15,8 @@ class ProcessRequest(BaseModel):
     call_id: str
     audio_url: str
     callback_url: str | None = None
+    direction: str = "inbound"  # "inbound" applies the greeting skip; "outbound" does not
+    greeting_skip_seconds: float | None = None  # override env default; None = use env
 
 
 class ReallocateRequest(BaseModel):
@@ -35,7 +37,13 @@ def healthz() -> dict:
 
 @app.post("/process")
 async def process(req: ProcessRequest) -> dict:
-    return await pipeline.process_call(req.call_id, req.audio_url, callback_url=req.callback_url)
+    return await pipeline.process_call(
+        req.call_id,
+        req.audio_url,
+        callback_url=req.callback_url,
+        direction=req.direction,
+        greeting_skip_seconds=req.greeting_skip_seconds,
+    )
 
 
 @app.post("/reallocate")
