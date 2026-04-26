@@ -32,5 +32,10 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # Shared secret for admin endpoints (/enroll/import, /enroll/rebuild).
+    # Required as the X-Admin-Secret header. Empty disables the check
+    # (open by default for local dev; set in prod).
+    admin_secret: str = ""
+
 
 settings = Settings()

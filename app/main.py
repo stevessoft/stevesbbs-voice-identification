@@ -1,6 +1,8 @@
+import hmac
+import json
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from app import enrollment, pipeline, speaker_id
@@ -9,6 +11,15 @@ from app.config import settings
 logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
 
 app = FastAPI(title="stevesbbs-voice-identification", version="0.1.0")
+
+
+def _require_admin(x_admin_secret: str | None) -> None:
+    """Constant-time check of the admin shared secret. If admin_secret is
+    unset (empty), admin endpoints are open for local dev."""
+    if not settings.admin_secret:
+        return
+    if not x_admin_secret or not hmac.compare_digest(x_admin_secret, settings.admin_secret):
+        raise HTTPException(status_code=401, detail="invalid X-Admin-Secret")
 
 
 class ProcessRequest(BaseModel):
@@ -22,6 +33,11 @@ class ProcessRequest(BaseModel):
 class ReallocateRequest(BaseModel):
     tech_name: str
     audio_url: str
+
+
+class ImportRequest(BaseModel):
+    profiles: dict[str, list[float]]
+    replace: bool = True  # if False, merge with existing
 
 
 @app.get("/healthz")
@@ -78,8 +94,40 @@ async def reallocate(req: ReallocateRequest) -> dict:
 
 
 @app.post("/enroll/rebuild")
-def enroll_rebuild() -> dict:
+def enroll_rebuild(x_admin_secret: str | None = Header(default=None)) -> dict:
     """Re-scan enrollment_audio/ and rewrite the embeddings file."""
+    _require_admin(x_admin_secret)
     profiles = enrollment.build_embeddings()
     speaker_id.reload_profiles()
     return {"ok": True, "enrolled_speakers": list(profiles)}
+
+
+@app.post("/enroll/import")
+def enroll_import(req: ImportRequest, x_admin_secret: str | None = Header(default=None)) -> dict:
+    """
+    Import pre-computed embeddings directly. Lets us load enrollment data
+    onto a deployed instance without uploading raw audio. Each profile is
+    a 256-dim float vector (Resemblyzer output).
+
+    With replace=true (default), overwrites the embeddings file entirely.
+    With replace=false, merges the imported profiles into the existing set.
+    """
+    _require_admin(x_admin_secret)
+
+    # Validate vector shape
+    for tech, vec in req.profiles.items():
+        if not isinstance(vec, list) or not vec:
+            raise HTTPException(status_code=422, detail=f"empty vector for {tech}")
+        if len(vec) != 256:
+            raise HTTPException(status_code=422, detail=f"{tech} vector len {len(vec)} != 256")
+
+    settings.embeddings_path.parent.mkdir(parents=True, exist_ok=True)
+    if req.replace or not settings.embeddings_path.exists():
+        merged = req.profiles
+    else:
+        existing = json.loads(settings.embeddings_path.read_text())
+        merged = {**existing, **req.profiles}
+
+    settings.embeddings_path.write_text(json.dumps(merged))
+    speaker_id.reload_profiles()
+    return {"ok": True, "enrolled_speakers": list(merged), "imported": list(req.profiles), "replace": req.replace}
