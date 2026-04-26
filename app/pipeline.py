@@ -82,7 +82,11 @@ async def process_call(
         if work_path != local:
             _delete_audio(work_path)
 
+    # `uuid` is Cytracom's native call identifier (Godwin's endpoint expects
+    # it under that name). `call_id` is included as an alias for any consumer
+    # that prefers the more descriptive name.
     payload = {
+        "uuid": call_id,
         "call_id": call_id,
         "speaker_id": spk,
         "confidence": round(conf, 4),
