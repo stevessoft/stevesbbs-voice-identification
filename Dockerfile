@@ -8,11 +8,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # System deps:
 #   ffmpeg, libsndfile1 — audio decoding for librosa / soundfile / faster-whisper
 #   build-essential, python3-dev — to compile webrtcvad (resemblyzer's C extension dep)
+#   curl — Coolify in-container healthcheck against /healthz
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     build-essential \
     python3-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
