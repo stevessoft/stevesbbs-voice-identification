@@ -5,10 +5,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-# System deps for soundfile / librosa / faster-whisper audio decoding
+# System deps:
+#   ffmpeg, libsndfile1 — audio decoding for librosa / soundfile / faster-whisper
+#   build-essential, python3-dev — to compile webrtcvad (resemblyzer's C extension dep)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
+    build-essential \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
