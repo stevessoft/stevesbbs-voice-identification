@@ -30,6 +30,8 @@ class ProcessRequest(BaseModel):
     callback_url: str | None = None
     direction: str = "inbound"  # "inbound" applies the greeting skip; "outbound" does not
     greeting_skip_seconds: float | None = None  # override env default; None = use env
+    started_on: str | None = None       # ISO 8601 from Cytracom; echoed in webhook
+    started_on_ts: int | None = None    # epoch ms from Cytracom; echoed in webhook
 
 
 class ReallocateRequest(BaseModel):
@@ -77,7 +79,13 @@ async def _run_sweep_job(job_id: str, start_date: str, end_date: str, skip_spam:
             job["skipped"] = skipped
             continue
         try:
-            await pipeline.process_call(call["call_id"], call["audio_url"], direction=call.get("direction", "inbound"))
+            await pipeline.process_call(
+                call["call_id"],
+                call["audio_url"],
+                direction=call.get("direction", "inbound"),
+                started_on=call.get("started_on"),
+                started_on_ts=call.get("started_on_ts"),
+            )
             processed += 1
             job["processed"] = processed
         except Exception:
@@ -110,6 +118,8 @@ async def process(req: ProcessRequest) -> dict:
         callback_url=req.callback_url,
         direction=req.direction,
         greeting_skip_seconds=req.greeting_skip_seconds,
+        started_on=req.started_on,
+        started_on_ts=req.started_on_ts,
     )
 
 

@@ -55,7 +55,8 @@ def _normalize_record(rec: dict) -> dict | None:
     return {
         "call_id": call_id,
         "audio_url": recording_url,
-        "started_at": rec.get("started_on"),
+        "started_on": rec.get("started_on"),       # ISO 8601 string from Cytracom
+        "started_on_ts": rec.get("started_on_ts"),  # epoch ms from Cytracom
         "direction": _direction_from_legs(rec.get("legs") or []),
         "caller_id": rec.get("original_caller_id"),
         "spam": rec.get("spam", False),

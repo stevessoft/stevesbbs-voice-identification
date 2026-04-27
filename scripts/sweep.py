@@ -44,7 +44,13 @@ async def run(hours_back: int = 24, skip_spam: bool = True) -> int:
         audio_url = call["audio_url"]
         direction = call.get("direction", "inbound")
         try:
-            await pipeline.process_call(call_id, audio_url, direction=direction)
+            await pipeline.process_call(
+                call_id,
+                audio_url,
+                direction=direction,
+                started_on=call.get("started_on"),
+                started_on_ts=call.get("started_on_ts"),
+            )
             processed += 1
         except Exception as e:
             log.exception("Failed processing call %s: %s", call_id, e)

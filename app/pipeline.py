@@ -53,6 +53,8 @@ async def process_call(
     callback_url: str | None = None,
     direction: str = "inbound",
     greeting_skip_seconds: float | None = None,
+    started_on: str | None = None,
+    started_on_ts: int | None = None,
 ) -> dict:
     """
     Process one call end-to-end.
@@ -84,10 +86,13 @@ async def process_call(
 
     # `uuid` is Cytracom's native call identifier (Godwin's endpoint expects
     # it under that name). `call_id` is included as an alias for any consumer
-    # that prefers the more descriptive name.
+    # that prefers the more descriptive name. `started_on` / `started_on_ts`
+    # echo Cytracom's call-start timestamps when known.
     payload = {
         "uuid": call_id,
         "call_id": call_id,
+        "started_on": started_on,
+        "started_on_ts": started_on_ts,
         "speaker_id": spk,
         "confidence": round(conf, 4),
         "scores": {k: round(v, 4) for k, v in scores.items()},
