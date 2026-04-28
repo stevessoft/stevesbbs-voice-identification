@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     # voicemail-only audio that would otherwise spuriously match a tech.
     min_speech_seconds: float = 5.0
 
+    # Profiles that represent non-tech audio (e.g., the auto-greeting voice).
+    # These compete in the embedding match: if the highest score belongs to
+    # one of these names, we tag the call with that name. They do NOT compete
+    # in the tech-vs-tech margin gate, so they don't pull real tech calls into
+    # "unknown" just by sitting close to the winning tech's score.
+    non_tech_profiles: list[str] = ["auto_greeting"]
+
     # Skip the first N seconds of incoming-call audio to drop the
     # automated greeting. Set to 0 to disable, or pass per-call via
     # the API request to override. Default 18s covers both the short

@@ -70,11 +70,20 @@ def identify(audio_path: Path) -> tuple[str, float, dict[str, float]]:
     if best_score < settings.confidence_threshold:
         return "unknown", best_score, scores
 
-    if len(sorted_scores) >= 2:
-        runner_up_score = sorted_scores[1][1]
+    # If a non-tech profile (e.g., auto_greeting) wins outright, return it.
+    # No margin check — these are explicit "this isn't a tech" signals.
+    if best_name in settings.non_tech_profiles:
+        return best_name, best_score, scores
+
+    # Otherwise, a tech won. Margin gate compares the winning tech to the
+    # NEXT-best TECH only (skipping non-tech profiles), so a close
+    # auto_greeting score doesn't drag the call into "unknown".
+    tech_sorted = [(n, s) for n, s in sorted_scores if n not in settings.non_tech_profiles]
+    if len(tech_sorted) >= 2:
+        runner_up_name, runner_up_score = tech_sorted[1]
         if (best_score - runner_up_score) < settings.min_margin:
-            log.info("Margin too tight: %s=%.3f vs %s=%.3f (Δ=%.3f < %.3f)",
-                     best_name, best_score, sorted_scores[1][0], runner_up_score,
+            log.info("Tech margin too tight: %s=%.3f vs %s=%.3f (Δ=%.3f < %.3f)",
+                     best_name, best_score, runner_up_name, runner_up_score,
                      best_score - runner_up_score, settings.min_margin)
             return "unknown", best_score, scores
 
