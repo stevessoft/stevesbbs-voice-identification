@@ -113,5 +113,11 @@ async def process_call(
     log.info("Processed %s [%s, skip=%.1fs, speech=%.1fs]: speaker=%s conf=%.3f chars=%d",
              call_id, direction, skip if direction == "inbound" else 0, speech_seconds, spk, conf, len(text))
 
-    await post_result(payload, callback_url=callback_url)
+    # Only fire the webhook when there's a real tech to attribute the call
+    # to. "unknown" and non-tech profiles (auto_greeting) get skipped per
+    # Godwin's preference, since his DB needs a user to tie the result to.
+    if spk == "unknown" or spk in settings.non_tech_profiles:
+        log.info("Skipping webhook for %s (speaker=%s, no tech to attribute)", call_id, spk)
+    else:
+        await post_result(payload, callback_url=callback_url)
     return payload
