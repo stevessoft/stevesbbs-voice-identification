@@ -47,6 +47,25 @@ def _delete_audio(path: Path) -> None:
         pass
 
 
+# Voicemail-message transcript signatures. The auto-attendant message text
+# is fixed and identical across every voicemail, so a transcript match is
+# a much harder signal than the acoustic match (which can be confused by
+# any tech with similar voice characteristics).
+_VOICEMAIL_PATTERNS = (
+    "sorry we missed you",
+    "leave a message",
+    "after the tone",
+    "after the beep",
+)
+
+
+def _is_voicemail_transcript(text: str) -> bool:
+    if not text:
+        return False
+    lower = text.lower()
+    return any(pat in lower for pat in _VOICEMAIL_PATTERNS)
+
+
 async def process_call(
     call_id: str,
     audio_source: str | Path,
@@ -85,6 +104,14 @@ async def process_call(
             log.info("Skipping speaker ID for %s: only %.1fs of speech detected (< %.1fs floor)",
                      call_id, speech_seconds, settings.min_speech_seconds)
             spk, conf, scores = "unknown", 0.0, {}
+        elif _is_voicemail_transcript(text):
+            # The voicemail message is fixed text. If the transcript matches
+            # the voicemail signature, force auto_greeting regardless of how
+            # the embedding match landed. This prevents long voicemail
+            # recordings (which have acoustic characteristics that can fool
+            # the encoder) from being attributed to a tech.
+            log.info("Voicemail transcript signature matched for %s, forcing auto_greeting", call_id)
+            spk, conf, scores = "auto_greeting", 1.0, speaker_id.identify(work_path)[2]
         else:
             spk, conf, scores = speaker_id.identify(work_path)
     finally:
