@@ -18,6 +18,14 @@ def _get_model() -> WhisperModel:
     return _model
 
 
-def transcribe(audio_path: Path) -> str:
+def transcribe(audio_path: Path) -> tuple[str, float]:
+    """
+    Returns (transcript_text, speech_seconds).
+    speech_seconds is the total duration of speech detected after VAD,
+    used downstream to gate speaker ID against dead-air calls.
+    """
     segments, _info = _get_model().transcribe(str(audio_path), beam_size=1, vad_filter=True)
-    return " ".join(seg.text.strip() for seg in segments).strip()
+    seg_list = list(segments)
+    text = " ".join(seg.text.strip() for seg in seg_list).strip()
+    speech_seconds = sum((seg.end - seg.start) for seg in seg_list)
+    return text, speech_seconds

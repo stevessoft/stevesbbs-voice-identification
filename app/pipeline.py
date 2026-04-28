@@ -77,8 +77,16 @@ async def process_call(
     work_path = _trim_prefix(local, skip) if direction == "inbound" else local
 
     try:
-        spk, conf, scores = speaker_id.identify(work_path)
-        text = transcribe.transcribe(work_path)
+        text, speech_seconds = transcribe.transcribe(work_path)
+        if speech_seconds < settings.min_speech_seconds:
+            # Dead-air / hold-music / voicemail-only call. Skip speaker ID
+            # entirely so we don't match the audio to one of the enrolled
+            # voices spuriously.
+            log.info("Skipping speaker ID for %s: only %.1fs of speech detected (< %.1fs floor)",
+                     call_id, speech_seconds, settings.min_speech_seconds)
+            spk, conf, scores = "unknown", 0.0, {}
+        else:
+            spk, conf, scores = speaker_id.identify(work_path)
     finally:
         _delete_audio(local)
         if work_path != local:
@@ -100,9 +108,10 @@ async def process_call(
         "transcribed_at": datetime.now(timezone.utc).isoformat(),
         "direction": direction,
         "greeting_skip_seconds": skip if direction == "inbound" else 0,
+        "speech_seconds": round(speech_seconds, 2),
     }
-    log.info("Processed %s [%s, skip=%.1fs]: speaker=%s conf=%.3f chars=%d",
-             call_id, direction, skip if direction == "inbound" else 0, spk, conf, len(text))
+    log.info("Processed %s [%s, skip=%.1fs, speech=%.1fs]: speaker=%s conf=%.3f chars=%d",
+             call_id, direction, skip if direction == "inbound" else 0, speech_seconds, spk, conf, len(text))
 
     await post_result(payload, callback_url=callback_url)
     return payload

@@ -49,7 +49,11 @@ def reload_profiles() -> None:
 def identify(audio_path: Path) -> tuple[str, float, dict[str, float]]:
     """
     Returns (speaker_id, confidence, all_scores).
-    speaker_id is "unknown" if best score is below settings.confidence_threshold.
+
+    Returns "unknown" when any of these gates fail:
+      1. No enrolled profiles (cold start).
+      2. Top-1 score < confidence_threshold (call doesn't sound like any tech).
+      3. Top-1 minus top-2 < min_margin (too close to call confidently).
     """
     profiles = load_profiles()
     if not profiles:
@@ -60,6 +64,18 @@ def identify(audio_path: Path) -> tuple[str, float, dict[str, float]]:
         name: float(np.dot(embedding, vec) / (np.linalg.norm(embedding) * np.linalg.norm(vec)))
         for name, vec in profiles.items()
     }
-    best_name, best_score = max(scores.items(), key=lambda kv: kv[1])
-    speaker_id = best_name if best_score >= settings.confidence_threshold else "unknown"
-    return speaker_id, best_score, scores
+    sorted_scores = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    best_name, best_score = sorted_scores[0]
+
+    if best_score < settings.confidence_threshold:
+        return "unknown", best_score, scores
+
+    if len(sorted_scores) >= 2:
+        runner_up_score = sorted_scores[1][1]
+        if (best_score - runner_up_score) < settings.min_margin:
+            log.info("Margin too tight: %s=%.3f vs %s=%.3f (Δ=%.3f < %.3f)",
+                     best_name, best_score, sorted_scores[1][0], runner_up_score,
+                     best_score - runner_up_score, settings.min_margin)
+            return "unknown", best_score, scores
+
+    return best_name, best_score, scores
