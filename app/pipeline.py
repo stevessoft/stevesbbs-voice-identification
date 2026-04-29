@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import subprocess
 import uuid
 from datetime import datetime, timezone
@@ -12,6 +13,66 @@ from app.config import settings
 from app.webhook import post_result
 
 log = logging.getLogger(__name__)
+
+# Aliases tech may use when introducing themselves on calls. Maps the
+# spoken form to the enrolled profile name. Add new aliases here as
+# they show up in real transcripts.
+TECH_NAME_ALIASES = {
+    "jonathan": "john",
+    "stonewall": "stonewall",
+    "stone wall": "stonewall",
+    "isaiah": "isaiah",
+    "steve": "steve",
+    "john": "john",
+}
+
+# Voicemail-message text fingerprints. If any of these appear in a
+# transcript, the call is auto_greeting regardless of the embedding match.
+# These phrases are FIXED text in Steve's voicemail recording so the
+# pattern is reliable.
+VOICEMAIL_SIGNATURES = [
+    "sorry we missed you",
+    "leave a message",
+    "after the tone",
+    "after the beep",
+]
+
+
+def _voicemail_in_transcript(transcript: str) -> bool:
+    text = transcript.lower()
+    return any(sig in text for sig in VOICEMAIL_SIGNATURES)
+
+
+def _named_tech_from_transcript(transcript: str, max_chars: int = 400) -> str | None:
+    """
+    Look at the start of the transcript for a tech introducing themselves.
+    Returns the enrolled profile name (e.g. "john", "stonewall") if matched,
+    None otherwise.
+
+    Patterns matched:
+      "this is <name>"     ← Steve's standard greeting: "Steve's Computer Repair, this is Stonewall"
+      "i'm <name>"
+      "i am <name>"
+      "my name is <name>"
+      "<name> speaking"
+    """
+    text = transcript[:max_chars].lower()
+    patterns = [
+        r"this\s+is\s+(?:the\s+)?([a-z]+(?:\s+[a-z]+)?)",
+        r"i'?m\s+([a-z]+)",
+        r"i\s+am\s+([a-z]+)",
+        r"my\s+name\s+is\s+([a-z]+)",
+        r"([a-z]+)\s+speaking",
+    ]
+    for pat in patterns:
+        for m in re.finditer(pat, text):
+            candidate = m.group(1).strip()
+            if candidate in TECH_NAME_ALIASES:
+                return TECH_NAME_ALIASES[candidate]
+            for alias, target in TECH_NAME_ALIASES.items():
+                if alias in candidate:
+                    return target
+    return None
 
 
 def _trim_prefix(src: Path, seconds: float) -> Path:
@@ -47,25 +108,6 @@ def _delete_audio(path: Path) -> None:
         pass
 
 
-# Voicemail-message transcript signatures. The auto-attendant message text
-# is fixed and identical across every voicemail, so a transcript match is
-# a much harder signal than the acoustic match (which can be confused by
-# any tech with similar voice characteristics).
-_VOICEMAIL_PATTERNS = (
-    "sorry we missed you",
-    "leave a message",
-    "after the tone",
-    "after the beep",
-)
-
-
-def _is_voicemail_transcript(text: str) -> bool:
-    if not text:
-        return False
-    lower = text.lower()
-    return any(pat in lower for pat in _VOICEMAIL_PATTERNS)
-
-
 async def process_call(
     call_id: str,
     audio_source: str | Path,
@@ -95,25 +137,36 @@ async def process_call(
     skip = (greeting_skip_seconds if greeting_skip_seconds is not None else settings.greeting_skip_seconds)
     work_path = _trim_prefix(local, skip) if direction == "inbound" else local
 
+    matched_via = "embedding"
     try:
         text, speech_seconds = transcribe.transcribe(work_path)
         if speech_seconds < settings.min_speech_seconds:
-            # Dead-air / hold-music / voicemail-only call. Skip speaker ID
-            # entirely so we don't match the audio to one of the enrolled
-            # voices spuriously.
             log.info("Skipping speaker ID for %s: only %.1fs of speech detected (< %.1fs floor)",
                      call_id, speech_seconds, settings.min_speech_seconds)
             spk, conf, scores = "unknown", 0.0, {}
-        elif _is_voicemail_transcript(text):
-            # The voicemail message is fixed text. If the transcript matches
-            # the voicemail signature, force auto_greeting regardless of how
-            # the embedding match landed. This prevents long voicemail
-            # recordings (which have acoustic characteristics that can fool
-            # the encoder) from being attributed to a tech.
-            log.info("Voicemail transcript signature matched for %s, forcing auto_greeting", call_id)
+            matched_via = "speech_floor"
+        elif _voicemail_in_transcript(text):
+            log.info("Voicemail signature matched for %s, forcing auto_greeting", call_id)
             spk, conf, scores = "auto_greeting", 1.0, speaker_id.identify(work_path)[2]
+            matched_via = "transcript_voicemail"
         else:
+            # Hybrid: run the embedding match, then check the transcript
+            # for a tech naming themselves (Steve's standard greeting is
+            # "Steve's computer repair, this is X"). If they self-named
+            # AND that tech's embedding score is at least 0.70 (lower than
+            # the regular threshold because the transcript is corroborating
+            # textual evidence), trust the transcript. The transcript is
+            # an unambiguous human signal that beats acoustic ambiguity.
             spk, conf, scores = speaker_id.identify(work_path)
+            named = _named_tech_from_transcript(text)
+            if named and named in scores and scores[named] >= 0.70:
+                if spk != named:
+                    log.info("Transcript override for %s: said '%s' (%.3f), embedding picked '%s' (%.3f)",
+                             call_id, named, scores[named], spk, conf)
+                    spk, conf = named, scores[named]
+                    matched_via = "transcript_self_intro"
+                else:
+                    matched_via = "transcript_confirmed"
     finally:
         _delete_audio(local)
         if work_path != local:
@@ -136,6 +189,7 @@ async def process_call(
         "direction": direction,
         "greeting_skip_seconds": skip if direction == "inbound" else 0,
         "speech_seconds": round(speech_seconds, 2),
+        "matched_via": matched_via,
     }
     log.info("Processed %s [%s, skip=%.1fs, speech=%.1fs]: speaker=%s conf=%.3f chars=%d",
              call_id, direction, skip if direction == "inbound" else 0, speech_seconds, spk, conf, len(text))
