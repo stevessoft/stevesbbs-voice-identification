@@ -21,9 +21,10 @@ class Settings(BaseSettings):
     # Minimum top-1 vs top-2 cosine similarity margin. If the winning
     # speaker's score is within this delta of the runner-up, the call is
     # too close to call confidently, so we tag it "unknown" instead of
-    # guessing. Catches the case where a tech's enrollment happens to
-    # match phone-codec characteristics better than the others.
-    min_margin: float = 0.04
+    # guessing. With all 4 techs enrolled from real Cytracom audio,
+    # profiles cluster naturally in phone-codec space, so margins
+    # tighten — 0.025 keeps real matches without false positives.
+    min_margin: float = 0.025
 
     # Minimum seconds of detected speech (after VAD filtering) for the
     # call to be considered identifiable. Below this, we skip speaker ID
@@ -51,6 +52,14 @@ class Settings(BaseSettings):
     scratch_dir: Path = Path("./scratch")
 
     log_level: str = "INFO"
+
+    # Whisper initial prompt: a short text that biases transcription toward
+    # known vocabulary. Critical for phone-codec audio where the small model
+    # otherwise hallucinates rare names ("Stonewall" → "Phil Alcomb",
+    # "Steve's Computer Repair" → "CSUS Computer Repair"). Bias the model
+    # with the shop name + tech roster so domain words are correctly
+    # transcribed even when phone audio is noisy.
+    whisper_initial_prompt: str = "Steve's Computer Repair. Technicians: Stonewall, Isaiah, John, Steve."
 
     # Shared secret for admin endpoints (/enroll/import, /enroll/rebuild).
     # Required as the X-Admin-Secret header. Empty disables the check
