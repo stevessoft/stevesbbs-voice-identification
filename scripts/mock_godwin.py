@@ -46,7 +46,8 @@ def list_calls(start: str | None = None, end: str | None = None) -> list[dict]:
 async def receive_webhook(req: Request) -> JSONResponse:
     body = await req.body()
     payload = json.loads(body)
-    log.info("Received webhook for %s: speaker=%s confidence=%s", payload.get("call_id"), payload.get("speaker_id"), payload.get("confidence"))
+    log.info("Received webhook for %s: speakers=%s segments=%d",
+             payload.get("call_id"), payload.get("speakers"), len(payload.get("segments", [])))
     with WEBHOOK_LOG.open("a") as f:
         f.write(json.dumps(payload) + "\n")
     return JSONResponse({"ok": True})
