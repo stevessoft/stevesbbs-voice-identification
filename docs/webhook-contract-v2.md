@@ -57,31 +57,25 @@ are removed — those fields now live inside each segment.
   "call_id": "3467633f-d8a7-461a-9893-c5c6bc31fdca",
   "started_on": "2026-04-29T12:46:56.454632-05:00",
   "started_on_ts": 1777484817725,
-  "speakers": ["stonewall", "external_caller"],
+  "speakers": ["isaiah", "external_caller"],
   "segments": [
     {
-      "start_s": 1.07,
-      "end_s": 7.07,
-      "speaker": "stonewall",
-      "transcript": "Hey, this is Stonewall calling from Steve's Computer Repair. How are you?",
-      "confidence": 0.901,
-      "matched_via": "transcript_self_intro"
-    },
-    {
-      "start_s": 7.07,
-      "end_s": 74.78,
+      "start_s": 22.27,
+      "end_s": 34.95,
       "speaker": "external_caller",
-      "transcript": "Doing good. Doing good. So I took a look at the device that you had brought back. ...",
-      "confidence": 0.92,
-      "matched_via": "no_match"
+      "transcript": "Hi, this is Carrie. I was going to start making my way over there to pick up my computer...",
+      "confidence": 0.892,
+      "matched_via": "no_match",
+      "caller_name": "Carrie"
     },
     {
-      "start_s": 74.78,
-      "end_s": 76.78,
-      "speaker": "stonewall",
-      "transcript": "Or the BIOS or anything like that.",
-      "confidence": 0.819,
-      "matched_via": "embedding"
+      "start_s": 34.95,
+      "end_s": 45.73,
+      "speaker": "isaiah",
+      "transcript": "Oh, you're till 6. Okay, well, I'm heading there now, so, or in the next few minutes...",
+      "confidence": 0.823,
+      "matched_via": "embedding",
+      "caller_name": null
     }
   ],
   "transcript": "Hey, this is Stonewall calling from Steve's Computer Repair. ...",
@@ -122,6 +116,7 @@ are removed — those fields now live inside each segment.
 | `transcript` | string | Speech text in this segment |
 | `confidence` | float | 0.0 to 1.0 cosine similarity score for the assigned speaker |
 | `matched_via` | string | How the assignment was made (see below) |
+| `caller_name` | string \| null | When `speaker` is `external_caller` and the segment text contains a self-intro pattern ("hi, this is Barbara", "I'm John", "my name is Carrie"), the extracted first name. Once captured on a call, propagates forward across subsequent `external_caller` segments until a different name is detected. `null` for technician segments and for any `external_caller` segment where no name was ever captured on the call. |
 
 ### Speaker labels
 
@@ -129,7 +124,7 @@ are removed — those fields now live inside each segment.
 |---|---|
 | `stonewall`, `isaiah`, `john`, `steve` | One of the 4 enrolled techs |
 | `auto_greeting` | Voicemail message text. Steve's auto-attendant. |
-| `external_caller` | Speaker not matching any enrolled tech. The customer. |
+| `external_caller` | Speaker not matching any enrolled tech. The customer. **UI tip:** render the segment's `caller_name` if present, else fall back to "Client". This produces "Barbara 3:34" when transcribable and "Client 3:34" otherwise. |
 
 The set is closed: any speaker label in `speakers` will always be one of
 the values above. If a 5th tech is later enrolled, that name joins the set.
@@ -216,3 +211,23 @@ All four produced sensible multi-segment timelines under the new pipeline.
 5. Smoke test: call `/process` with a known Cytracom recording and confirm
    the new payload reaches Godwin's endpoint and is processed correctly.
 6. Godwin runs a sweep over a recent date range to verify behavior at scale.
+
+---
+
+## Revisions
+
+**2026-05-01 — Customer name extraction (`caller_name`)**
+Added per-segment `caller_name` field on `external_caller` segments to render
+Steven's wireframe pattern where the customer is shown by name when
+transcribable ("Barbara 3:34") and falls back to "Client 3:34" otherwise.
+Logic: same self-intro regexes used for tech detection, but inverted to
+capture names that AREN'T enrolled techs. A capitalization filter (Whisper
+title-cases proper names but not common words like "not" / "more" / "like")
+plus a stop-word block-list keeps false positives out. Name captured once
+on a call propagates forward across subsequent external_caller segments
+until a different name appears. Same Whisper-VAD multi-speaker-chunk
+caveat from the original Known Limitation section applies — if the
+customer says their name during a chunk that's mostly the technician
+speaking, the name might attach to the wrong segment.
+
+**2026-04-30 — Initial v2 contract published.**

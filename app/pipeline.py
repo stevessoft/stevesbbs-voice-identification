@@ -48,6 +48,77 @@ TRANSCRIPT_OVERRIDE_FLOOR = 0.70
 # This is the customer (or any non-enrolled speaker) on the call.
 EXTERNAL_CALLER = "external_caller"
 
+# Self-intro patterns reused for customer name extraction. These run on
+# external_caller segments to pull out a name like "Barbara" / "John" when
+# the customer self-introduces. Whatever name is captured propagates
+# forward across subsequent external_caller segments in the call (until a
+# different name appears) so Godwin's UI can render "Barbara 3:34" in
+# place of the generic "Client 3:34".
+#
+# Patterns are case-insensitive but capture against the ORIGINAL text so
+# we can verify the captured token is title-cased (Whisper title-cases
+# proper names but not common words). That capitalization check filters
+# out false positives like "I'm not" / "more" / "like maybe" that the
+# regex would otherwise grab.
+_SELF_INTRO_PATTERNS = [
+    re.compile(r"\bthis\s+is\s+(?:the\s+)?([A-Za-z]+)\b"),
+    re.compile(r"\bI'?m\s+([A-Za-z]+)\b"),
+    re.compile(r"\bI\s+am\s+([A-Za-z]+)\b"),
+    re.compile(r"\bmy\s+name\s+is\s+([A-Za-z]+)\b"),
+    re.compile(r"\b([A-Za-z]+)\s+speaking\b"),
+]
+
+# Common English filler words that look like names to a regex but are
+# clearly not. Used as a secondary block-list after the capitalization
+# check, in case Whisper ever title-cases a non-name (e.g. start of a
+# sentence: "Calling about your invoice").
+_NOT_A_NAME = {
+    "sorry", "calling", "trying", "going", "hoping", "looking",
+    "wondering", "regarding", "about", "just", "still", "probably",
+    "actually", "really", "definitely", "good", "fine", "okay",
+    "yes", "yeah", "right", "doing", "here", "there", "back",
+    "today", "tomorrow", "ready", "all", "with", "from", "for",
+    "to", "in", "on", "at", "by", "not", "more", "less", "like",
+    "the", "a", "an", "and", "but", "or", "if", "so", "very",
+    "well", "now", "then", "before", "after", "even", "also",
+    "always", "never", "sometimes", "maybe", "probably", "definitely",
+    "another", "something", "anything", "everything", "nothing",
+    "someone", "anyone", "everyone", "noone", "wanting",
+}
+
+
+def _customer_name_from_text(text: str, max_chars: int = 400) -> str | None:
+    """
+    Pull a customer's first name out of the segment text when they
+    self-introduce. Returns the extracted name (Title Case) or None.
+
+    Filters:
+      1. Captured token must be title-cased in original text (Whisper
+         title-cases proper names but not common words).
+      2. Skips enrolled tech aliases (those go through the tech path).
+      3. Skips common English filler words that may slip through
+         capitalization (e.g. "Sorry" at sentence start).
+      4. Rejects candidates that are substrings of tech aliases
+         (e.g. "Stone" inside "Stonewall").
+    """
+    snippet = text[:max_chars]
+    for pat in _SELF_INTRO_PATTERNS:
+        for m in pat.finditer(snippet):
+            candidate_orig = m.group(1).strip()
+            if not candidate_orig or len(candidate_orig) < 2:
+                continue
+            # Capitalization check: must start with uppercase, rest lowercase.
+            # "Carrie" passes, "not" / "MORE" / "lIke" all fail.
+            if not (candidate_orig[0].isupper() and candidate_orig[1:].islower()):
+                continue
+            candidate = candidate_orig.lower()
+            if candidate in TECH_NAME_ALIASES or candidate in _NOT_A_NAME:
+                continue
+            if any(candidate in alias or alias in candidate for alias in TECH_NAME_ALIASES):
+                continue
+            return candidate_orig.title()
+    return None
+
 
 def _voicemail_in_text(text: str) -> bool:
     lower = text.lower()
@@ -137,6 +208,11 @@ class ClassifiedSegment:
     confidence: float
     matched_via: str
     scores: dict[str, float] = field(default_factory=dict)
+    # Captured customer name when the segment is external_caller and a
+    # self-intro was extracted from the transcript. Propagates forward
+    # across subsequent external_caller segments in the same call until
+    # a different name appears. Always None for tech segments.
+    caller_name: str | None = None
 
 
 def _classify_segments(
@@ -156,6 +232,10 @@ def _classify_segments(
     """
     classified: list[ClassifiedSegment] = []
     last_speaker = EXTERNAL_CALLER  # before any classification, assume external
+    # Sticky caller name: once we catch a customer's name on this call, it
+    # propagates forward across subsequent external_caller segments until
+    # a different name appears.
+    current_caller_name: str | None = None
 
     for seg in segments:
         # 1. Voicemail signature in the segment text -> auto_greeting
@@ -177,6 +257,7 @@ def _classify_segments(
         if result is None:
             # Window too short to embed. Inherit the previous speaker
             # (sticky rule). matched_via reflects the inheritance.
+            inherited_caller = current_caller_name if last_speaker == EXTERNAL_CALLER else None
             classified.append(ClassifiedSegment(
                 start_s=seg.start_s + greeting_skip_seconds,
                 end_s=seg.end_s + greeting_skip_seconds,
@@ -184,6 +265,7 @@ def _classify_segments(
                 speaker=last_speaker,
                 confidence=0.0,
                 matched_via="window_too_short",
+                caller_name=inherited_caller,
             ))
             continue
 
@@ -207,6 +289,16 @@ def _classify_segments(
         else:
             matched_via = "embedding"
 
+        # 4. Customer name extraction. Only runs on external_caller
+        # segments. Updates the sticky current_caller_name when a new
+        # name is captured; otherwise the prior name keeps propagating.
+        caller_name: str | None = None
+        if spk == EXTERNAL_CALLER:
+            extracted = _customer_name_from_text(seg.text)
+            if extracted:
+                current_caller_name = extracted
+            caller_name = current_caller_name
+
         classified.append(ClassifiedSegment(
             start_s=seg.start_s + greeting_skip_seconds,
             end_s=seg.end_s + greeting_skip_seconds,
@@ -215,6 +307,7 @@ def _classify_segments(
             confidence=conf,
             matched_via=matched_via,
             scores=scores,
+            caller_name=caller_name,
         ))
         last_speaker = spk
 
@@ -251,6 +344,11 @@ def _merge_consecutive_same_speaker(segments: list[ClassifiedSegment]) -> list[C
                 prev.matched_via = seg.matched_via
                 if seg.scores:
                     prev.scores = seg.scores
+            # Prefer the more recent caller_name when it's non-null;
+            # propagation already carried it forward, so the latest value
+            # is the most current.
+            if seg.caller_name:
+                prev.caller_name = seg.caller_name
         else:
             merged.append(seg)
     return merged
@@ -339,6 +437,7 @@ async def process_call(
                 "transcript": s.text,
                 "confidence": round(s.confidence, 4),
                 "matched_via": s.matched_via,
+                "caller_name": s.caller_name,
             }
             for s in classified
         ],
