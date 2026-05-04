@@ -99,8 +99,13 @@ mkdir -p enrollment_audio/marcus
 cp /path/to/marcus_sample.mp3 enrollment_audio/marcus/
 python -m scripts.enroll  # writes enrolled_voices/embeddings.json
 
-# Push the new embedding to the live service
+# Back up the live profile set BEFORE pushing (so a failed import
+# doesn't leave the service with no profiles).
 ADMIN_SECRET="<from .credentials>"
+curl -s "https://voice-id.stevesbbs.com/healthz" > /tmp/healthz-before.json
+cp enrolled_voices/embeddings.json enrolled_voices/embeddings.json.bak
+
+# Push the new embedding to the live service
 curl -X POST "https://voice-id.stevesbbs.com/enroll/import" \
   -H "Content-Type: application/json" \
   -H "X-Admin-Secret: $ADMIN_SECRET" \
@@ -110,6 +115,16 @@ curl -X POST "https://voice-id.stevesbbs.com/enroll/import" \
 `replace: true` overwrites the live profile set with whatever's in the
 JSON. Use this when you're rebuilding the full list. To add a single
 tech without disturbing the others, set `replace: false`.
+
+**If the import fails** (non-200 response, or `/healthz` afterwards
+shows missing profiles), restore from the local backup:
+
+```bash
+curl -X POST "https://voice-id.stevesbbs.com/enroll/import" \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Secret: $ADMIN_SECRET" \
+  -d "$(jq -c '{profiles: ., replace: true}' enrolled_voices/embeddings.json.bak)"
+```
 
 **Verify:**
 
@@ -135,11 +150,11 @@ true`.
 
 The `auto_greeting` profile catches calls where the automated greeting
 plays and no tech actually picks up. When the greeting recording itself
-changes, that profile has to be rebuilt or the service will start
+changes, two things have to be updated or the service will start
 mistakenly tagging real techs as `auto_greeting` (and skipping the
 webhook).
 
-**Steps:**
+### 4a. Voice profile (the embedding)
 
 1. Get a clean recording of the new auto-greeting (15-30 seconds is
    plenty)
@@ -147,8 +162,35 @@ webhook).
 3. Re-run `python -m scripts.enroll`
 4. Push the rebuilt embeddings via `/enroll/import` (`replace: true`)
 
+### 4b. Voicemail signature phrases (Coolify env var)
+
+**Where:** Coolify → Voice ID project → `voice-id` application → Configuration → Environment Variables → `VOICEMAIL_SIGNATURES`
+
+**Default:** `sorry we missed you,leave a message,after the tone,after the beep`
+
+**What it does:** independent of the embedding match, the service scans
+each segment's transcript for any of these phrases. If one is found,
+the segment is force-tagged `auto_greeting` at confidence 1.0 and the
+embedding result is ignored. This catches voicemails where the
+transcript wording is reliable even if the audio quality fools the
+embedding.
+
+**When to change:** any time Steve's voicemail or auto-greeting wording
+changes. If the new recording uses different phrases ("you've reached
+Steve's, please leave your name and number" instead of "leave a
+message"), update the env var to match. Comma-separated, case-insensitive
+substring match.
+
+**Format rule:** comma-separated phrases, no surrounding quotes, no
+trailing comma. Each phrase is matched as a case-insensitive substring,
+so shorter is more aggressive (matches more) and longer is more
+specific (matches less).
+
+**How:** edit the value in Coolify, click **Restart** on the
+application. About 30 seconds end to end.
+
 This is rare — only triggered when Steve actually changes the greeting
-script Cytracom plays at the start of incoming calls.
+or voicemail script Cytracom plays at the start of incoming calls.
 
 ---
 

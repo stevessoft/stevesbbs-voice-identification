@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     # transcribed even when phone audio is noisy.
     whisper_initial_prompt: str = "Steve's Computer Repair. Technicians: Stonewall, Isaiah, John, Steve."
 
+    # Voicemail-message text fingerprints. If any of these phrases appears
+    # in a segment transcript, that segment is forced to auto_greeting at
+    # confidence 1.0 regardless of the embedding match. Comma-separated
+    # list; matching is case-insensitive substring. Keep in sync with the
+    # wording of Steve's actual voicemail recording.
+    voicemail_signatures: str = "sorry we missed you,leave a message,after the tone,after the beep"
+
     # Shared secret for admin endpoints (/enroll/import, /enroll/rebuild).
     # Required as the X-Admin-Secret header. Empty disables the check
     # (open by default for local dev; set in prod).

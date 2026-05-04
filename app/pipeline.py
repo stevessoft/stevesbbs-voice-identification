@@ -28,15 +28,15 @@ TECH_NAME_ALIASES = {
     "john": "john",
 }
 
-# Voicemail-message text fingerprints. If any of these appear in a segment
-# transcript, that segment is forced to auto_greeting regardless of the
-# embedding match. These phrases are FIXED text in Steve's voicemail
-# recording so the pattern is reliable.
+# Voicemail-message text fingerprints loaded from settings.voicemail_signatures.
+# Configurable via the VOICEMAIL_SIGNATURES env var (comma-separated). If any
+# phrase appears in a segment transcript, that segment is forced to
+# auto_greeting regardless of the embedding match. Lowercased once at import
+# so the per-segment check stays a simple substring scan.
 VOICEMAIL_SIGNATURES = [
-    "sorry we missed you",
-    "leave a message",
-    "after the tone",
-    "after the beep",
+    s.strip().lower()
+    for s in settings.voicemail_signatures.split(",")
+    if s.strip()
 ]
 
 # Below this score in a per-segment window, even with a transcript match,
