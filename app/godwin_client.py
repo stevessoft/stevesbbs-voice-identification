@@ -52,12 +52,18 @@ def _normalize_record(rec: dict) -> dict | None:
     recording_url = rec.get("recording_url")
     if not (call_id and recording_url):
         return None
+    legs = rec.get("legs") or []
+    first_leg = legs[0] if legs else {}
+    caller_number = (first_leg.get("caller") or {}).get("number")
+    callee_number = (first_leg.get("callee") or {}).get("number")
     return {
         "call_id": call_id,
         "audio_url": recording_url,
         "started_on": rec.get("started_on"),       # ISO 8601 string from Cytracom
         "started_on_ts": rec.get("started_on_ts"),  # epoch ms from Cytracom
-        "direction": _direction_from_legs(rec.get("legs") or []),
+        "direction": _direction_from_legs(legs),
+        "caller_number": caller_number,
+        "callee_number": callee_number,
         "caller_id": rec.get("original_caller_id"),
         "spam": rec.get("spam", False),
         "monitored": rec.get("monitored", False),

@@ -362,6 +362,8 @@ async def process_call(
     greeting_skip_seconds: float | None = None,
     started_on: str | None = None,
     started_on_ts: int | None = None,
+    caller_number: str | None = None,
+    callee_number: str | None = None,
 ) -> dict:
     """
     Multi-speaker pipeline. Returns a payload with a per-segment timeline:
@@ -428,6 +430,8 @@ async def process_call(
         "call_id": call_id,
         "started_on": started_on,
         "started_on_ts": started_on_ts,
+        "caller_number": caller_number,
+        "callee_number": callee_number,
         "speakers": speakers_detected,
         "segments": [
             {

@@ -57,6 +57,8 @@ are removed — those fields now live inside each segment.
   "call_id": "3467633f-d8a7-461a-9893-c5c6bc31fdca",
   "started_on": "2026-04-29T12:46:56.454632-05:00",
   "started_on_ts": 1777484817725,
+  "caller_number": "+16155551234",
+  "callee_number": "+16158620000",
   "speakers": ["isaiah", "external_caller"],
   "segments": [
     {
@@ -98,6 +100,8 @@ are removed — those fields now live inside each segment.
 | `call_id` | string | Same as `uuid`, kept as alias |
 | `started_on` | string \| null | ISO 8601 call start, echoed from Cytracom |
 | `started_on_ts` | int \| null | Epoch ms call start, echoed from Cytracom |
+| `caller_number` | string \| null | First leg caller phone number (`legs[0].caller.number`) from Cytracom |
+| `callee_number` | string \| null | First leg callee phone number (`legs[0].callee.number`) from Cytracom |
 | `speakers` | string[] | Deduped list of speaker labels in order of first appearance |
 | `segments` | object[] | Per-segment timeline (see below). Always at least one segment. |
 | `transcript` | string | Full transcript text concatenated (kept for backward-compat / search) |

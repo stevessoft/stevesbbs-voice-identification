@@ -32,6 +32,8 @@ class ProcessRequest(BaseModel):
     greeting_skip_seconds: float | None = None  # override env default; None = use env
     started_on: str | None = None       # ISO 8601 from Cytracom; echoed in webhook
     started_on_ts: int | None = None    # epoch ms from Cytracom; echoed in webhook
+    caller_number: str | None = None    # legs[0].caller.number; echoed in webhook
+    callee_number: str | None = None    # legs[0].callee.number; echoed in webhook
 
 
 class ReallocateRequest(BaseModel):
@@ -85,6 +87,8 @@ async def _run_sweep_job(job_id: str, start_date: str, end_date: str, skip_spam:
                 direction=call.get("direction", "inbound"),
                 started_on=call.get("started_on"),
                 started_on_ts=call.get("started_on_ts"),
+                caller_number=call.get("caller_number"),
+                callee_number=call.get("callee_number"),
             )
             processed += 1
             job["processed"] = processed
@@ -120,6 +124,8 @@ async def process(req: ProcessRequest) -> dict:
         greeting_skip_seconds=req.greeting_skip_seconds,
         started_on=req.started_on,
         started_on_ts=req.started_on_ts,
+        caller_number=req.caller_number,
+        callee_number=req.callee_number,
     )
 
 
