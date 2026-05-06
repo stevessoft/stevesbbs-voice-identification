@@ -27,7 +27,6 @@ enrolled_voices/embeddings.json
 models/
 
 # Editor
-.vscode/
 .idea/
 *.swp
 .DS_Store
@@ -36,3 +35,7 @@ models/
 mock_data/audio/
 mock_data/webhook_log.jsonl
 scratch/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
